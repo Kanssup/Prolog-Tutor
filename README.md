@@ -1,0 +1,2 @@
+# Prolog Tutor 
+Es una aplicación web interactiva que permite a los usuarios escribir, ejecutar y visualizar el proceso de razonamiento de un intérprete de Prolog. A través de un lienzo dinámico, la herramienta genera árboles de deducción que muestran el camino del motor lógico, facilitando la depuración y comprensión de estos.
