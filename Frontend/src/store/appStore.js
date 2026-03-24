@@ -5,6 +5,55 @@ import { checkEasterEgg } from '../utils/easterEgg';
 import { applyTheme, getInitialTheme, saveTheme } from '../themes/colors';
 import accessibility from '../utils/accessibility';
 
+function isInternalExecutionGoal(goal = '') {
+  const normalized = String(goal || '').trim().toLowerCase();
+
+  if (!normalized) return false;
+
+  // Hide only runtime plumbing injected by the backend for read/get0 isolation.
+  return (
+    normalized.includes('setup_call_cleanup(') ||
+    normalized.includes('open_string("",') ||
+    (normalized.includes('set_stream(') && normalized.includes('alias(pt_input)')) ||
+    normalized.includes('current_input(<stream>') ||
+    normalized.includes('set_input(pt_input)') ||
+    normalized.includes('close(pt_input)') ||
+    normalized.includes('call(user:(set_input(')
+  );
+}
+
+function removeInternalExecutionNodes(rawNode) {
+  if (!rawNode) return null;
+
+  const processNode = (node) => {
+    if (!node) return [];
+
+    const rawChildren = Array.isArray(node.children) ? node.children : [];
+    const normalizedChildren = rawChildren.flatMap(processNode);
+
+    if (isInternalExecutionGoal(node.goal)) {
+      // Drop internal wrapper nodes but keep user-facing descendants.
+      return normalizedChildren;
+    }
+
+    return [
+      {
+        ...node,
+        children: normalizedChildren,
+      },
+    ];
+  };
+
+  if (Array.isArray(rawNode)) {
+    return rawNode.flatMap(processNode);
+  }
+
+  const normalized = processNode(rawNode);
+  if (normalized.length === 0) return null;
+  if (normalized.length === 1) return normalized[0];
+  return normalized;
+}
+
 /**
  * Main application store for Prolog Tutor
  * Manages global state with persistence
@@ -256,9 +305,9 @@ const useAppStore = create(
       
       // Execution actions
       executeQuery: async () => {
-        const { code, query, queryInput, runtimeCodeShadow, files, currentFile } = get();
+        const { code, query, queryInput, files, currentFile } = get();
         const normalizedQuery = query.trim().replace(/\.+\s*$/, '');
-        const effectiveCode = runtimeCodeShadow || code;
+        const effectiveCode = code;
 
         const filesWithCurrentBuffer = files.map((file) => {
           if (currentFile && file.id === currentFile) {
@@ -295,7 +344,15 @@ const useAppStore = create(
           return;
         }
         
-        set({ isExecuting: true, errors: [], executionProgress: 0 });
+        set({
+          isExecuting: true,
+          errors: [],
+          executionProgress: 0,
+          // Clear previous visualization while a new execution is in flight.
+          treeData: null,
+          currentStep: 0,
+          totalSteps: 0,
+        });
         accessibility.announceExecutionStart();
         
         // Simulate progress updates
@@ -311,13 +368,34 @@ const useAppStore = create(
           clearInterval(progressInterval);
           get().setExecutionProgress(100);
           
-          if (result.success) {
+          const hasExecutionPayload =
+            result &&
+            (
+              result.tree ||
+              typeof result.consoleOutput === 'string' ||
+              typeof result.traceOutput === 'string'
+            );
+
+          if (result.success || hasExecutionPayload) {
             const treeData = get().formatTreeData(result.tree);
             const totalSteps = get().countTreeSteps(treeData);
             const consoleLogs = [...get().consoleLogs];
             const runtimeFiles = Array.isArray(result.runtimeFiles) ? result.runtimeFiles : [];
+            const nextCode = result.updatedCode || code;
 
             let synchronizedFiles = [...get().files];
+
+            // If backend mutated predicates (assert/retract/etc), reflect resulting code in the active file.
+            if (result.updatedCode && currentFile) {
+              const activeIndex = synchronizedFiles.findIndex((file) => file.id === currentFile);
+              if (activeIndex !== -1) {
+                synchronizedFiles[activeIndex] = {
+                  ...synchronizedFiles[activeIndex],
+                  code: nextCode,
+                  lastModified: new Date().toISOString(),
+                };
+              }
+            }
             for (const runtimeFile of runtimeFiles) {
               if (!runtimeFile?.name) continue;
 
@@ -354,6 +432,17 @@ const useAppStore = create(
               });
             }
 
+            if (result.success === false) {
+              consoleLogs.unshift({
+                id: `${Date.now()}-no-solution`,
+                type: 'info',
+                source: 'prolog',
+                message: 'Consulta sin soluciones (false).',
+                data: result.consoleOutput || 'false.',
+                timestamp: new Date().toISOString(),
+              });
+            }
+
             if (result.traceOutput && result.traceOutput.trim()) {
               consoleLogs.unshift({
                 id: `${Date.now()}-trace`,
@@ -369,8 +458,10 @@ const useAppStore = create(
               treeData,
               currentStep: 0,
               totalSteps,
-              runtimeCodeShadow: result.updatedCode || runtimeCodeShadow,
-              unsavedChanges: get().unsavedChanges,
+              code: nextCode,
+              runtimeCodeShadow: '',
+              unsavedChanges:
+                (result.updatedCode && result.updatedCode !== code) || get().unsavedChanges,
               files: synchronizedFiles,
               consoleLogs: consoleLogs.slice(0, 100),
               panelStates: {
@@ -408,7 +499,7 @@ const useAppStore = create(
             return result;
           } else {
             set({
-              errors: [...get().errors, { message: result.error, type: 'execution' }],
+              errors: [...get().errors, { message: result.error || 'Execution failed', type: 'execution' }],
               isExecuting: false,
             });
             accessibility.announceExecutionError(result.error || 'Error desconocido');
@@ -462,6 +553,9 @@ const useAppStore = create(
       formatTreeData: (node) => {
         if (!node) return null;
 
+        const cleanedTree = removeInternalExecutionNodes(node);
+        if (!cleanedTree) return null;
+
         let stepCounter = 0;
 
         const formatNode = (n) => ({
@@ -483,9 +577,9 @@ const useAppStore = create(
         });
 
         // Backend can return an array of root nodes; normalize it for the tree component.
-        if (Array.isArray(node)) {
-          if (node.length === 0) return null;
-          if (node.length === 1) return formatNode(node[0]);
+        if (Array.isArray(cleanedTree)) {
+          if (cleanedTree.length === 0) return null;
+          if (cleanedTree.length === 1) return formatNode(cleanedTree[0]);
 
           return {
             id: `root-${Date.now()}`,
@@ -494,7 +588,7 @@ const useAppStore = create(
             status: 'pending',
             level: 0,
             bindings: {},
-            children: node.map(formatNode),
+            children: cleanedTree.map(formatNode),
             metadata: {
               executionTime: 0,
               ruleUsed: null,
@@ -504,7 +598,7 @@ const useAppStore = create(
           };
         }
 
-        return formatNode(node);
+        return formatNode(cleanedTree);
       },
       
       countTreeSteps: (node) => {

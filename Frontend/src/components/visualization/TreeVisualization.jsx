@@ -31,7 +31,8 @@ const TreeVisualization = () => {
   const panelRef = useRef(null);
   const treeContainerRef = useRef(null);
   const treeRef = useRef(null);
-  const renderedTreeData = useMemo(() => buildRecursiveFocusedTree(treeData), [treeData]);
+  // Render the backend tree as-is so the visualization always matches the executed query.
+  const renderedTreeData = useMemo(() => treeData, [treeData]);
   const recursionFunctor = useMemo(() => detectRecursionFunctor(renderedTreeData), [renderedTreeData]);
 
   useEffect(() => {

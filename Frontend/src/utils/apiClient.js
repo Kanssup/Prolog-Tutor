@@ -59,9 +59,10 @@ export async function executeQuery(code, query, input = '', runtimeFiles = []) {
 
     const data = await response.json();
     
-    // Handle backend errors
-    if (!data.success) {
-      throw new Error(data.error || 'Execution failed');
+    // Treat logical query failure (`false.`) as a valid execution result.
+    // Only throw when backend reports an actual runtime/validation error.
+    if (!data.success && data.error) {
+      throw new Error(data.error);
     }
     
     return data;
