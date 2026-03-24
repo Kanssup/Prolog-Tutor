@@ -1,117 +1,252 @@
-import React, { useState } from 'react';
-import Tree from 'react-d3-tree';
-import './App.css'; // Asegúrate de tener este archivo para unos estilos básicos
+import React, { useEffect } from 'react';
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import { motion, AnimatePresence } from 'framer-motion';
+
+// Layout Components
+import Header from './components/layout/Header';
+import Sidebar from './components/layout/Sidebar';
+import SplitPaneLayout from './components/layout/SplitPaneLayout';
+import ErrorBoundary from './components/layout/ErrorBoundary';
+
+// Editor Components
+import CodeEditor from './components/editor/CodeEditor';
+import QueryInput from './components/editor/QueryInput';
+
+// Visualization Components
+import TreeVisualization from './components/visualization/TreeVisualization';
+import ExecutionControls from './components/visualization/ExecutionControls';
+
+// Panel Components
+import ConsolePanel from './components/panels/ConsolePanel';
+
+// Store and Theme
+import useAppStore from './store/appStore';
+import { applyTheme, getInitialTheme } from './themes/colors';
+
+// Easter Egg
+import { checkEasterEgg, createConfettiEffect } from './utils/easterEgg';
+
+// Accessibility
+import KeyboardShortcuts from './components/accessibility/KeyboardShortcuts';
 
 function App() {
-  const [codigo, setCodigo] = useState(
-    'padre(juan, maria).\npadre(maria, pedro).\nabuelo(X, Y) :- padre(X, Z), padre(Z, Y).'
-  );
-  const [consulta, setConsulta] = useState('abuelo(juan, pedro)');
-  const [treeData, setTreeData] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const {
+    theme,
+    sidebarOpen,
+    easterEggTriggered,
+    checkBackendHealth,
+    backendHealth,
+    errors,
+    clearErrors,
+  } = useAppStore();
 
-  // Adaptamos nuestro JSON al formato que espera react-d3-tree
-  const formatTreeData = (node) => {
-    return {
-      name: node.goal,
-      attributes: {
-        estado: node.status,
-        nivel: node.level
-      },
-      // Recursividad para formatear a los hijos
-      children: node.children ? node.children.map(formatTreeData) : []
-    };
-  };
+  // Initialize theme and accessibility
+  useEffect(() => {
+    const initialTheme = getInitialTheme();
+    applyTheme(initialTheme);
+    
+    // Initialize accessibility features
+    // Note: accessibility features are initialized through the store
+  }, []);
 
-  const generarArbol = async () => {
-    setLoading(true);
-    try {
-      // Petición a tu backend
-      const response = await fetch('http://localhost:3000/api/generar-arbol', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ codigo, consulta })
-      });
-      
-      const data = await response.json();
-      
-      if (data.success && data.arbol.length > 0) {
-        // Formateamos y guardamos el nodo raíz en el estado
-        setTreeData(formatTreeData(data.arbol[0]));
+  // Check backend health on mount
+  useEffect(() => {
+    checkBackendHealth();
+    
+    // Periodic health check every 30 seconds
+    const interval = setInterval(checkBackendHealth, 30000);
+    return () => clearInterval(interval);
+  }, [checkBackendHealth]);
+
+  // Handle backend health changes
+  useEffect(() => {
+    if (backendHealth) {
+      if (backendHealth.status === 'unhealthy') {
+        toast.error('Backend no disponible. Verifica que el servidor esté ejecutándose.', {
+          autoClose: false,
+        });
       }
-    } catch (error) {
-      console.error("Error al conectar con el backend:", error);
-      alert("Error al generar el árbol. Asegúrate de que el backend esté corriendo.");
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [backendHealth]);
 
-  // Renderizador personalizado para pintar los nodos de verde (éxito) o rojo (falla)
-  const renderCustomNode = ({ nodeDatum }) => {
-    const isSuccess = nodeDatum.attributes.estado === 'success';
-    return (
-      <g>
-        <rect 
-          width="160" height="40" x="-80" y="-20" 
-          fill={isSuccess ? '#d4edda' : '#f8d7da'} 
-          stroke={isSuccess ? '#28a745' : '#dc3545'} 
-          strokeWidth="2" rx="5" 
-        />
-        <text fill="#333" strokeWidth="0" x="0" y="5" textAnchor="middle" style={{ fontFamily: 'monospace', fontSize: '14px' }}>
-          {nodeDatum.name}
-        </text>
-      </g>
-    );
-  };
+  // Handle errors
+  useEffect(() => {
+    if (errors.length > 0) {
+      const latestError = errors[0];
+      toast.error(latestError.message, {
+        onClose: clearErrors,
+      });
+    }
+  }, [errors, clearErrors]);
+
+  // Easter egg effects
+  useEffect(() => {
+    if (easterEggTriggered) {
+      // Create confetti effect
+      const container = document.getElementById('app-container');
+      if (container) {
+        createConfettiEffect(container, 7000);
+      }
+      
+      // Show special notification
+      toast.success('🎉 ¡Easter Egg Activado!', {
+        autoClose: 5000,
+        theme: 'colored',
+        style: {
+          background: 'linear-gradient(135deg, #8b5cf6, #ec4899)',
+        },
+      });
+    }
+  }, [easterEggTriggered]);
+
+  // Keyboard shortcuts and accessibility
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Ctrl+Enter to execute query
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        const { code, query, isExecuting, executeQuery } = useAppStore.getState();
+        
+        // Check for Easter egg
+        const easterEgg = checkEasterEgg(code, query);
+        if (easterEgg.isEasterEgg) {
+          useAppStore.getState().triggerEasterEgg(easterEgg);
+          return;
+        }
+        
+        if (code.trim() && query.trim() && !isExecuting) {
+          executeQuery();
+        }
+      }
+      
+      // Escape to cancel execution
+      if (e.key === 'Escape') {
+        const { isExecuting, cancelExecution } = useAppStore.getState();
+        if (isExecuting) {
+          cancelExecution();
+          toast.info('Ejecución cancelada');
+        }
+      }
+      
+      // Alt+1 to focus editor
+      if (e.altKey && e.key === '1') {
+        e.preventDefault();
+        const editor = document.querySelector('.monaco-editor textarea');
+        if (editor) editor.focus();
+      }
+      
+      // Alt+2 to focus query input
+      if (e.altKey && e.key === '2') {
+        e.preventDefault();
+        const queryInput = document.querySelector('input[placeholder*="consulta"]');
+        if (queryInput) queryInput.focus();
+      }
+      
+      // Alt+3 to toggle sidebar
+      if (e.altKey && e.key === '3') {
+        e.preventDefault();
+        useAppStore.getState().toggleSidebar();
+      }
+      
+      // Alt+4 to toggle theme
+      if (e.altKey && e.key === '4') {
+        e.preventDefault();
+        useAppStore.getState().toggleTheme();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   return (
-    <div className="App" style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <header style={{ padding: '20px', backgroundColor: '#282c34', color: 'white', display: 'flex', gap: '20px' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-          <label>Código Prolog:</label>
-          <textarea 
-            value={codigo} 
-            onChange={e => setCodigo(e.target.value)} 
-            rows="5" 
-            style={{ fontFamily: 'monospace', padding: '10px' }}
-          />
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, justifyContent: 'flex-start' }}>
-          <label>Consulta:</label>
-          <input 
-            value={consulta} 
-            onChange={e => setConsulta(e.target.value)} 
-            style={{ fontFamily: 'monospace', padding: '10px', marginBottom: '10px' }}
-          />
-          <button 
-            onClick={generarArbol} 
-            disabled={loading}
-            style={{ padding: '10px', fontSize: '16px', cursor: 'pointer' }}
-          >
-            {loading ? 'Generando...' : 'Generar Árbol SLD'}
-          </button>
-        </div>
-      </header>
-      
-      {/* Contenedor del Árbol */}
-      <div style={{ flex: 1, backgroundColor: '#f4f4f9', borderTop: '2px solid #ccc' }}>
-        {treeData ? (
-          <Tree 
-            data={treeData} 
-            orientation="vertical"
-            renderCustomNodeElement={renderCustomNode}
-            pathFunc="step" // Usa líneas rectas con ángulos de 90 grados
-            translate={{ x: window.innerWidth / 2, y: 100 }}
-            zoomable={true}
-            collapsible={true}
-          />
-        ) : (
-          <p style={{ textAlign: 'center', marginTop: '50px', color: '#666' }}>
-            Ingresa tu código y consulta para visualizar la deducción lógica.
-          </p>
-        )}
+    <div 
+      id="app-container"
+      className={`min-h-screen bg-neutral-50 dark:bg-neutral-900 transition-colors duration-200 ${
+        theme === 'dark' ? 'dark' : ''
+      }`}
+    >
+      {/* Toast Notifications */}
+      <ToastContainer
+        position="top-right"
+        autoClose={5000}
+        hideProgressBar={false}
+        newestOnTop
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        theme={theme}
+      />
+
+      {/* Header */}
+      <Header />
+
+      {/* Main Layout */}
+      <div className="flex">
+        {/* Sidebar */}
+        <Sidebar />
+
+        {/* Main Content */}
+        <main className={`flex-1 transition-all duration-300 ${
+          sidebarOpen ? 'lg:ml-64' : ''
+        }`}>
+          <div className="container mx-auto p-4">
+            
+            {/* Split Pane Layout */}
+            <SplitPaneLayout>
+              {/* Left Pane: Editor */}
+              <div className="h-full min-h-0 flex flex-col">
+                <div className="flex-1 min-h-[260px] overflow-hidden">
+                  <CodeEditor />
+                </div>
+                <div className="mt-2 shrink-0">
+                  <QueryInput />
+                </div>
+                <div className="mt-2 min-h-[220px] h-[38%] overflow-hidden">
+                  <ErrorBoundary>
+                    <ConsolePanel />
+                  </ErrorBoundary>
+                </div>
+              </div>
+
+              {/* Right Pane: Visualization */}
+              <div className="h-full min-h-0 flex flex-col">
+                <div className="flex-1 min-h-[280px] overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900">
+                  <ErrorBoundary>
+                    <TreeVisualization />
+                  </ErrorBoundary>
+                </div>
+                <div className="mt-2 shrink-0">
+                  <ErrorBoundary>
+                    <ExecutionControls />
+                  </ErrorBoundary>
+                </div>
+              </div>
+            </SplitPaneLayout>
+
+          </div>
+        </main>
       </div>
+
+      {/* Easter Egg Overlay */}
+      <AnimatePresence>
+        {easterEggTriggered && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 pointer-events-none z-50"
+          >
+            <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-pink-500/10" />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Keyboard Shortcuts Accessibility */}
+      <KeyboardShortcuts />
     </div>
   );
 }

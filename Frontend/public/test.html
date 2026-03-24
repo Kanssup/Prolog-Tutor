@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prolog Tutor - Test Page</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 10px;
+        }
+        .status {
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .loading {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 0;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        pre {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            overflow: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+        .log {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Prolog Tutor - System Test</h1>
+        
+        <div id="status" class="status loading">Initializing test...</div>
+        
+        <div>
+            <h2>Test Results</h2>
+            <div id="tests">
+                <p>Running tests...</p>
+            </div>
+        </div>
+        
+        <div>
+            <h2>Backend API Test</h2>
+            <button onclick="testBackend()">Test Backend Connection</button>
+            <div id="backendResult" class="log"></div>
+        </div>
+        
+        <div>
+            <h2>Console Log</h2>
+            <div id="consoleLog" class="log"></div>
+        </div>
+        
+        <div>
+            <h2>System Information</h2>
+            <pre id="sysInfo"></pre>
+        </div>
+    </div>
+
+    <script>
+        const consoleLog = document.getElementById('consoleLog');
+        const status = document.getElementById('status');
+        const tests = document.getElementById('tests');
+        const backendResult = document.getElementById('backendResult');
+        const sysInfo = document.getElementById('sysInfo');
+        
+        function log(message, type = 'info') {
+            const entry = document.createElement('div');
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            entry.style.color = type === 'error' ? '#dc3545' : type === 'success' ? '#28a745' : '#6c757d';
+            entry.style.marginBottom = '5px';
+            entry.style.fontFamily = 'monospace';
+            entry.style.fontSize = '14px';
+            consoleLog.appendChild(entry);
+            consoleLog.scrollTop = consoleLog.scrollHeight;
+            
+            // Also log to browser console
+            if (type === 'error') {
+                console.error(message);
+            } else if (type === 'success') {
+                console.log(message);
+            } else {
+                console.info(message);
+            }
+        }
+        
+        function updateStatus(message, type) {
+            status.textContent = message;
+            status.className = `status ${type}`;
+        }
+        
+        function addTestResult(name, passed, details = '') {
+            const test = document.createElement('div');
+            test.innerHTML = `
+                <strong>${name}:</strong> 
+                <span style="color: ${passed ? '#28a745' : '#dc3545'}">
+                    ${passed ? '✓ PASS' : '✗ FAIL'}
+                </span>
+                ${details ? `<br><small>${details}</small>` : ''}
+            `;
+            test.style.marginBottom = '10px';
+            test.style.padding = '5px';
+            test.style.backgroundColor = passed ? '#f8fff8' : '#fff8f8';
+            test.style.borderLeft = `3px solid ${passed ? '#28a745' : '#dc3545'}`;
+            tests.appendChild(test);
+        }
+        
+        async function testBackend() {
+            backendResult.innerHTML = '';
+            log('Testing backend connection to /api/health...');
+            
+            try {
+                const startTime = Date.now();
+                const response = await fetch('/api/health');
+                const endTime = Date.now();
+                const duration = endTime - startTime;
+                
+                log(`Response status: ${response.status} (${duration}ms)`);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    backendResult.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+                    log('Backend connection successful!', 'success');
+                    addTestResult('Backend API', true, `Response time: ${duration}ms`);
+                } else {
+                    log(`Backend error: ${response.status} ${response.statusText}`, 'error');
+                    addTestResult('Backend API', false, `HTTP ${response.status}`);
+                }
+            } catch (error) {
+                log(`Backend connection failed: ${error.message}`, 'error');
+                addTestResult('Backend API', false, error.message);
+            }
+        }
+        
+        // Initialize
+        log('Test page loaded');
+        updateStatus('Running system checks...', 'loading');
+        
+        // Run initial tests
+        setTimeout(() => {
+            // Test 1: Browser capabilities
+            const hasFetch = typeof fetch !== 'undefined';
+            addTestResult('Fetch API', hasFetch);
+            
+            // Test 2: Console logging
+            addTestResult('Console Logging', true);
+            
+            // Test 3: DOM API
+            const hasDOM = typeof document !== 'undefined' && document.getElementById;
+            addTestResult('DOM API', hasDOM);
+            
+            // Test 4: JavaScript ES6+
+            const hasES6 = () => {
+                try {
+                    new Function('class Test {}');
+                    new Function('const a = 1; let b = 2;');
+                    new Function('() => {}');
+                    return true;
+                } catch {
+                    return false;
+                }
+            };
+            addTestResult('ES6+ Support', hasES6());
+            
+            // Test backend automatically
+            testBackend();
+            
+            updateStatus('Tests completed', 'success');
+            
+            // Display system info
+            sysInfo.textContent = JSON.stringify({
+                userAgent: navigator.userAgent,
+                platform: navigator.platform,
+                language: navigator.language,
+                cookiesEnabled: navigator.cookieEnabled,
+                screen: {
+                    width: screen.width,
+                    height: screen.height,
+                    colorDepth: screen.colorDepth
+                },
+                window: {
+                    width: window.innerWidth,
+                    height: window.innerHeight
+                },
+                location: window.location.href,
+                timestamp: new Date().toISOString()
+            }, null, 2);
+            
+        }, 100);
+    </script>
+</body>
+</html>

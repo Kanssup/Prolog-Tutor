@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minimal React Test</title>
+    <script crossorigin src="https://unpkg.com/react@19/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@19/umd/react-dom.development.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .app {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .status {
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 10px;
+            font-size: 18px;
+            transition: all 0.3s;
+        }
+        .loading { background: #fff3cd; color: #856404; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 50px;
+            font-size: 18px;
+            cursor: pointer;
+            margin: 20px 0;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+        .info {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            text-align: left;
+        }
+        .info h3 {
+            margin-top: 0;
+            color: #495057;
+        }
+        .info ul {
+            padding-left: 20px;
+        }
+        .info li {
+            margin: 8px 0;
+            color: #6c757d;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <script>
+        console.log('Minimal React test starting...');
+        
+        const { useState, useEffect } = React;
+        
+        function MinimalApp() {
+            const [status, setStatus] = useState('Checking React...');
+            const [statusClass, setStatusClass] = useState('loading');
+            const [backendStatus, setBackendStatus] = useState('Not tested');
+            const [clickCount, setClickCount] = useState(0);
+            
+            useEffect(() => {
+                console.log('MinimalApp mounted');
+                
+                // Test React state
+                setTimeout(() => {
+                    setStatus('React is working! 🎉');
+                    setStatusClass('success');
+                    console.log('React state update successful');
+                }, 1000);
+                
+                // Test fetch
+                testBackend();
+            }, []);
+            
+            function testBackend() {
+                console.log('Testing backend...');
+                fetch('/api/health')
+                    .then(response => {
+                        console.log('Backend response:', response.status);
+                        return response.json();
+                    })
+                    .then(data => {
+                        console.log('Backend data:', data);
+                        setBackendStatus(`✅ Backend: ${data.status} (v${data.services?.processPool?.timestamp || 'N/A'})`);
+                    })
+                    .catch(error => {
+                        console.error('Backend error:', error);
+                        setBackendStatus(`❌ Error: ${error.message}`);
+                    });
+            }
+            
+            function handleClick() {
+                setClickCount(prev => prev + 1);
+                console.log('Button clicked, count:', clickCount + 1);
+            }
+            
+            return React.createElement('div', { className: 'app' }, [
+                React.createElement('h1', { key: 'title' }, 'Prolog Tutor - Minimal Test'),
+                React.createElement('div', { 
+                    key: 'status',
+                    className: `status ${statusClass}`
+                }, status),
+                React.createElement('p', { key: 'backend' }, backendStatus),
+                React.createElement('button', { 
+                    key: 'button',
+                    onClick: handleClick
+                }, `Clicked ${clickCount} times`),
+                React.createElement('div', { key: 'info', className: 'info' }, [
+                    React.createElement('h3', { key: 'info-title' }, 'What this tests:'),
+                    React.createElement('ul', { key: 'info-list' }, [
+                        React.createElement('li', { key: '1' }, 'React 19 loading and rendering'),
+                        React.createElement('li', { key: '2' }, 'React state management (useState)'),
+                        React.createElement('li', { key: '3' }, 'React effects (useEffect)'),
+                        React.createElement('li', { key: '4' }, 'Fetch API to backend'),
+                        React.createElement('li', { key: '5' }, 'Event handling (button clicks)'),
+                        React.createElement('li', { key: '6' }, 'Console logging for debugging')
+                    ])
+                ])
+            ]);
+        }
+        
+        // Render the app
+        try {
+            console.log('Creating React root...');
+            const rootElement = document.getElementById('root');
+            if (!rootElement) {
+                throw new Error('Root element #root not found');
+            }
+            
+            const root = ReactDOM.createRoot(rootElement);
+            console.log('Rendering React app...');
+            root.render(React.createElement(MinimalApp));
+            console.log('React app rendered successfully!');
+        } catch (error) {
+            console.error('Error rendering React:', error);
+            document.body.innerHTML = `
+                <div class="app" style="color: #dc3545;">
+                    <h1>Error Loading React</h1>
+                    <p><strong>${error.message}</strong></p>
+                    <p>Check browser console for details.</p>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>
