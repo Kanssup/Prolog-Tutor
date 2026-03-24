@@ -714,6 +714,21 @@ const useAppStore = create(
         set((state) => ({
           easterEggTriggered: true,
           easterEggCount: state.easterEggCount + 1,
+          consoleLogs: [
+            {
+              id: `${Date.now()}-easter-egg`,
+              type: 'success',
+              source: 'prolog',
+              message: 'Salida de Easter Egg',
+              data: easterEgg.response || 'capture(lester).',
+              timestamp: new Date().toISOString(),
+            },
+            ...state.consoleLogs,
+          ].slice(0, 100),
+          panelStates: {
+            ...state.panelStates,
+            console: true,
+          },
           agentResponses: [
             {
               type: 'easter-egg',

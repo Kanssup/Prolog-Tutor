@@ -68,7 +68,7 @@ class AccessibilityManager {
   }
 
   announceEasterEgg() {
-    this.announceUrgent('¡Easter egg activado! ¡Captura a Lesther!');
+    this.announceUrgent('¡Easter egg activado! ¡Captura a Lester!');
   }
 
   announceBackendStatus(status) {

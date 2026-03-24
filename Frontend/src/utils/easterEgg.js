@@ -1,6 +1,6 @@
 /**
  * Easter Egg Utility for Prolog Tutor
- * Handles the special "free(guapo)" → "capture(lesther)" Easter egg
+ * Handles the special "free(guapo)" -> "capture(lester)" Easter egg
  */
 
 /**
@@ -25,7 +25,7 @@ export function checkEasterEgg(code, query) {
     return {
       isEasterEgg: true,
       message: '🎉 ¡Easter egg activado! Has descubierto un secreto especial.',
-      response: 'capture(lesther).',
+      response: 'capture(lester).',
       specialEffect: 'confetti',
       sound: 'chime',
       duration: 7000, // 7 seconds
@@ -45,7 +45,7 @@ export function checkEasterEgg(code, query) {
     return {
       isEasterEgg: true,
       message: '🎉 ¡Easter egg activado!',
-      response: 'capture(lesther).',
+      response: 'capture(lester).',
       specialEffect: 'confetti',
       sound: 'chime',
       duration: 5000,
