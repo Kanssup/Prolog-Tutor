@@ -1,0 +1,89 @@
+# Dependencias de Node.js
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Entornos de desarrollo
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Archivos de IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+
+# Logs
+logs
+*.log
+
+# Build
+dist
+build
+
+# Archivos temporales
+tmp
+temp
+
+# Archivos de prueba
+test
+tests
+__tests__
+*.test.js
+*.spec.js
+cypress
+
+# Archivos de configuración específicos de desarrollo
+docker-compose.yml
+docker-compose.*.yml
+Dockerfile*
+.dockerignore
+
+# Archivos de documentación no esenciales
+README.md
+CHANGELOG.md
+LICENSE
+*.pdf
+*.doc
+*.docx
+
+# Archivos de backup
+*.bak
+*.backup
+
+# Archivos de cobertura
+coverage
+.nyc_output
+
+# Archivos de configuración de herramientas
+.eslintrc.js
+.prettierrc.js
+tsconfig.json
+tsconfig.*.json
+jest.config.js
+
+# Archivos de diseño
+*.sketch
+*.fig
+*.xd
+
+# Archivos multimedia grandes
+*.mp4
+*.mov
+*.avi
+*.mkv
+
+# Archivos comprimidos
+*.zip
+*.tar
+*.gz
+*.rar

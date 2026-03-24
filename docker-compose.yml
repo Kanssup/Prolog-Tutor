@@ -1,0 +1,41 @@
+services:
+  backend:
+    build: ./Backend
+    container_name: prolog-backend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - PROLOG_FILES_DIR=/app/prolog_files
+    volumes:
+      - prolog_files:/app/prolog_files
+      - ./Backend/temp:/app/temp
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - prolog-network
+
+  frontend:
+    build: ./Frontend
+    container_name: prolog-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=production
+    networks:
+      - prolog-network
+
+volumes:
+  prolog_files:
+
+networks:
+  prolog-network:
+    driver: bridge
