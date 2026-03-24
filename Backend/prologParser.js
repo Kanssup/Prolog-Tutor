@@ -23,61 +23,119 @@ function humanizarVariables(text) {
 
 function parseTraceToTree(traceText) {
     const lines = traceText.split('\n');
-    
-    // Creamos una raíz virtual para agrupar todo
-    const root = { level: 0, goal: "Root", children: [] };
-    const stack = [root]; 
 
-    // Regex para capturar: Puerto, Nivel (ignorando espacios) y la Meta (Goal)
+    // Raíz virtual para agrupar todas las consultas/top goals.
+    const root = { level: -1, goal: 'Root', status: 'pending', children: [] };
+
+    // Pila de activación real: el último elemento representa el contexto actual.
+    // Cada nodo guarda _traceLevel para emparejar puertos de forma robusta.
+    let activePath = [root];
+    const allNodes = [];
+
+    // Regex para capturar: Puerto, Nivel y Meta.
     const regex = /(Call|Exit|Fail|Redo):\s*\(\s*(\d+)\s*\)\s*(.*)/;
 
-    lines.forEach(line => {
-        const match = line.match(regex);
-        if (!match) return; // Si la línea no es del trace, la ignoramos
+    const cleanGoal = (rawGoal) => rawGoal.replace(/\s*\?$/, '').trim();
 
-        const [_, port, levelStr, rawGoal] = match;
-        const level = parseInt(levelStr, 10);
-        
-        // Limpiamos el objetivo (quitamos el '?' del final y espacios extra)
-        const goal = rawGoal.replace(/\s*\?$/, '').trim();
+    const findLastIndex = (arr, predicate) => {
+        for (let i = arr.length - 1; i >= 0; i -= 1) {
+            if (predicate(arr[i])) return i;
+        }
+        return -1;
+    };
 
-        if (port === 'Call') {
-            const newNode = {
-                level: level,
-                goal: goal,
-                status: 'pending', // Estado inicial
-                children: []
-            };
-
-            // Retrocedemos en la pila si hubo backtracking (niveles anteriores)
-            while (stack.length > 1 && stack[stack.length - 1].level >= level) {
-                stack.pop();
-            }
-
-            // Añadimos el nuevo nodo como hijo del nodo actual en la cima de la pila
-            stack[stack.length - 1].children.push(newNode);
-            // Y lo metemos en la pila porque ahora estamos "dentro" de él
-            stack.push(newNode);
-
-        } else if (port === 'Exit') {
-            // Éxito: Buscamos el nodo en la pila y lo marcamos de verde
-            const node = stack.find(n => n.level === level);
-            if (node) {
-                node.status = 'success';
-                node.goal = goal; // Actualizamos por si Prolog instanció variables (ej: A -> pedro)
-            }
-        } else if (port === 'Fail') {
-            // Fallo: Lo marcamos de rojo
-        const node = stack.find(n => n.level === level);
-            if (node && node.status !== 'success') {
-                node.status = 'fail';
+    const findLatestNodeByLevel = (level, goal) => {
+        for (let i = allNodes.length - 1; i >= 0; i -= 1) {
+            const n = allNodes[i];
+            if (n._traceLevel === level && (!goal || n.goal === goal || n._originalGoal === goal)) {
+                return n;
             }
         }
-        // Nota: Los eventos 'Redo' significan que Prolog intenta otra rama. 
-        // El siguiente 'Call' creará automáticamente al hermano gracias al 'while' de arriba.
+        return null;
+    };
+
+    lines.forEach((line) => {
+        const match = line.match(regex);
+        if (!match) return;
+
+        const [, port, levelStr, rawGoal] = match;
+        const level = parseInt(levelStr, 10);
+        const goal = cleanGoal(rawGoal);
+
+        if (port === 'Call') {
+            // Si el nivel no es más profundo, subimos hasta encontrar el padre correcto.
+            while (
+                activePath.length > 1 &&
+                activePath[activePath.length - 1]._traceLevel >= level
+            ) {
+                activePath.pop();
+            }
+
+            const parent = activePath[activePath.length - 1];
+            const newNode = {
+                level,
+                _traceLevel: level,
+                _originalGoal: goal,
+                goal,
+                status: 'pending',
+                children: [],
+            };
+
+            parent.children.push(newNode);
+            allNodes.push(newNode);
+            activePath.push(newNode);
+            return;
+        }
+
+        // Para Exit/Fail/Redo, buscamos el nodo activo más reciente en ese nivel.
+        let idx = findLastIndex(activePath, (n) => n._traceLevel === level);
+        let node = idx >= 0 ? activePath[idx] : null;
+
+        if (!node) {
+            // Fallback para traces incompletos o desordenados.
+            node = findLatestNodeByLevel(level, goal);
+            idx = node ? findLastIndex(activePath, (n) => n === node) : -1;
+        }
+
+        if (!node) return;
+
+        if (port === 'Exit') {
+            node.status = 'success';
+            node.goal = goal;
+
+            // Al salir, volvemos al padre del nodo cerrado.
+            if (idx >= 0) {
+                activePath = activePath.slice(0, idx);
+                if (activePath.length === 0) activePath = [root];
+            }
+            return;
+        }
+
+        if (port === 'Fail') {
+            if (node.status !== 'success') {
+                node.status = 'fail';
+                node.goal = goal || node.goal;
+            }
+
+            // Al fallar, también se cierra ese frame y se vuelve al padre.
+            if (idx >= 0) {
+                activePath = activePath.slice(0, idx);
+                if (activePath.length === 0) activePath = [root];
+            }
+            return;
+        }
+
+        if (port === 'Redo') {
+            // Redo reactiva el frame para explorar alternativas.
+            node.status = 'pending';
+            node.goal = goal || node.goal;
+
+            if (idx >= 0) {
+                activePath = activePath.slice(0, idx + 1);
+            }
+        }
     });
 
-    // Retornamos los hijos de la raíz virtual (usualmente es un solo nodo: la consulta principal)
     return root.children;
 }
 

@@ -8,11 +8,21 @@
   "main": "server.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js"
+    "start": "node app.js",
+    "dev": "nodemon app.js"
   },
   "dependencies": {
     "cors": "^2.8.6",
     "express": "^5.2.1",
-    "swipl-stdio": "^1.0.4"
+    "swipl-stdio": "^1.0.4",
+    "uuid": "^9.0.0",
+    "lru-cache": "^10.0.0",
+    "compression": "^1.7.4",
+    "helmet": "^7.0.0",
+    "express-rate-limit": "^7.1.0",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
   }
 }
