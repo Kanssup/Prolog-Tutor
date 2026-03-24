@@ -1,0 +1,15 @@
+# Dependencies
+**/node_modules/
+
+# Build outputs
+Frontend/dist/
+
+# Runtime/temp files
+Backend/temp/
+Backend/prolog/program.pl
+letra.txt
+musica.txt
+
+# Editor/system
+.excalidraw
+.DS_Store
