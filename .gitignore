@@ -13,3 +13,13 @@ musica.txt
 # Editor/system
 .excalidraw
 .DS_Store
+
+# Test coverage reports
+Backend/coverage/
+Frontend/coverage/
+
+# Log files
+Backend/logs/
+
+# SDD artifacts
+.atl/
