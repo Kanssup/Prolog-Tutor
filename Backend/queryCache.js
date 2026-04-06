@@ -1,5 +1,7 @@
 const crypto = require('crypto');
 const { LRUCache } = require('lru-cache');
+const logger = require('./src/config/logger');
+const executionConstants = require('./src/constants/execution');
 
 /**
  * Query Cache for Prolog Tutor
@@ -8,11 +10,11 @@ const { LRUCache } = require('lru-cache');
 class QueryCache {
   constructor(options = {}) {
     this.options = {
-      maxSize: 100, // Maximum number of cached entries
-      ttl: 5 * 60 * 1000, // 5 minutes TTL
-      maxEntrySize: 10 * 1024 * 1024, // 10MB per entry
-      checkPeriod: 60 * 1000, // 1 minute cleanup check
-      compressionThreshold: 1024 * 1024, // 1MB threshold for compression
+      maxSize: executionConstants.DEFAULT_CACHE_MAX_SIZE,
+      ttl: executionConstants.CACHE_TTL_MS,
+      maxEntrySize: executionConstants.MAX_ENTRY_SIZE,
+      checkPeriod: executionConstants.CACHE_CHECK_PERIOD_MS,
+      compressionThreshold: executionConstants.COMPRESSION_THRESHOLD,
       ...options
     };
 
@@ -80,7 +82,7 @@ class QueryCache {
       return Buffer.byteLength(jsonString, 'utf8');
     } catch (error) {
       // Fallback estimation
-      return 1024; // 1KB default
+      return executionConstants.DEFAULT_SIZE_ESTIMATE;
     }
   }
 
@@ -114,7 +116,7 @@ class QueryCache {
         });
       });
     } catch (error) {
-      console.warn(`[QueryCache] Compression failed: ${error.message}`);
+      logger.warn(`[QueryCache] Compression failed: ${error.message}`);
       return data;
     }
   }
@@ -142,7 +144,7 @@ class QueryCache {
         });
       });
     } catch (error) {
-      console.warn(`[QueryCache] Decompression failed: ${error.message}`);
+      logger.warn(`[QueryCache] Decompression failed: ${error.message}`);
       throw error;
     }
   }
@@ -174,7 +176,7 @@ class QueryCache {
       
       return value;
     } catch (error) {
-      console.warn(`[QueryCache] Failed to retrieve cached value for key ${key}: ${error.message}`);
+      logger.warn(`[QueryCache] Failed to retrieve cached value for key ${key}: ${error.message}`);
       this.cache.delete(key);
       this.stats.misses++;
       return null;
@@ -195,13 +197,13 @@ class QueryCache {
     
     // Check if entry is too large
     if (entrySize > this.options.maxEntrySize) {
-      console.warn(`[QueryCache] Entry too large (${entrySize} bytes), skipping cache`);
+      logger.warn(`[QueryCache] Entry too large (${entrySize} bytes), skipping cache`);
       return false;
     }
 
     // Check cache capacity
     if (this.stats.size + entrySize > this.options.maxSize * this.options.maxEntrySize) {
-      console.warn('[QueryCache] Cache capacity exceeded, performing emergency eviction');
+      logger.warn('[QueryCache] Cache capacity exceeded, performing emergency eviction');
       this.performEmergencyEviction();
     }
 
@@ -233,7 +235,7 @@ class QueryCache {
       
       return true;
     } catch (error) {
-      console.warn(`[QueryCache] Failed to cache value: ${error.message}`);
+      logger.warn(`[QueryCache] Failed to cache value: ${error.message}`);
       return false;
     }
   }
@@ -315,7 +317,7 @@ class QueryCache {
    * Perform emergency eviction when cache is full
    */
   performEmergencyEviction() {
-    const targetReduction = this.options.maxSize * this.options.maxEntrySize * 0.3; // Reduce by 30%
+    const targetReduction = this.options.maxSize * this.options.maxEntrySize * executionConstants.CACHE_EMERGENCY_EVICTION_RATIO;
     let freedSize = 0;
     
     // Get entries sorted by last accessed (oldest first)
@@ -337,7 +339,7 @@ class QueryCache {
     }
 
     this.stats.size -= freedSize;
-    console.log(`[QueryCache] Emergency eviction freed ${freedSize} bytes`);
+    logger.info(`[QueryCache] Emergency eviction freed ${freedSize} bytes`);
     this.emitStats('emergency_eviction', { freedSize });
   }
 
@@ -396,7 +398,7 @@ class QueryCache {
       const hitRate = this.stats.hits / (this.stats.hits + this.stats.misses) || 0;
       
       if (event === 'hit' || event === 'miss') {
-        console.log(`[QueryCache] ${event.toUpperCase()}: hitRate=${(hitRate * 100).toFixed(1)}%, size=${this.formatBytes(this.stats.size)}`);
+        logger.debug(`[QueryCache] ${event.toUpperCase()}: hitRate=${(hitRate * 100).toFixed(1)}%, size=${this.formatBytes(this.stats.size)}`);
       }
     }
   }
@@ -468,7 +470,7 @@ class QueryCache {
   async shutdown() {
     this.stopCleanupInterval();
     this.clear();
-    console.log('[QueryCache] Cache shutdown complete');
+    logger.info('[QueryCache] Cache shutdown complete');
   }
 }
 

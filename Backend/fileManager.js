@@ -1,6 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
+const logger = require('./src/config/logger');
+const executionConstants = require('./src/constants/execution');
 
 /**
  * Temporary File Manager for Prolog Tutor
@@ -10,9 +12,9 @@ class TempFileManager {
   constructor(options = {}) {
     this.options = {
       tempDir: path.join(__dirname, 'temp'),
-      cleanupInterval: 5 * 60 * 1000, // 5 minutes
-      maxFileAge: 10 * 60 * 1000, // 10 minutes
-      maxFileSize: 1024 * 1024, // 1MB
+      cleanupInterval: executionConstants.CLEANUP_INTERVAL_MS,
+      maxFileAge: executionConstants.MAX_FILE_AGE_MS,
+      maxFileSize: executionConstants.MAX_FILE_SIZE,
       ...options
     };
 
@@ -209,7 +211,7 @@ class TempFileManager {
 
     this.cleanupInterval = setInterval(() => {
       this.cleanupOldFiles().catch(error => {
-        console.error('Cleanup interval error:', error);
+        logger.error('Cleanup interval error:', { error: error.message });
       });
     }, this.options.cleanupInterval);
   }
@@ -261,15 +263,15 @@ class TempFileManager {
     // Check for extremely long lines (potential DoS)
     const lines = content.split('\n');
     for (const line of lines) {
-      if (line.length > 10000) {
-        throw new Error('Line too long (max 10000 characters)');
+      if (line.length > executionConstants.MAX_LINE_LENGTH) {
+        throw new Error(`Line too long (max ${executionConstants.MAX_LINE_LENGTH} characters)`);
       }
     }
 
     // Basic Prolog syntax check (ensure it ends with period)
     const trimmed = content.trim();
     if (trimmed.length > 0 && !trimmed.endsWith('.')) {
-      console.warn('Prolog code might not end with period');
+      logger.warn('Prolog code might not end with period');
     }
   }
 
@@ -296,9 +298,9 @@ class TempFileManager {
 
     // In production, this would use a proper logger
     if (process.env.NODE_ENV !== 'test') {
-      console.log(`[FileManager] ${event}: ${fileInfo.filename} (${fileInfo.size} bytes)`);
+      logger.debug(`[FileManager] ${event}: ${fileInfo.filename} (${fileInfo.size} bytes)`);
       if (error) {
-        console.error(`[FileManager] Error: ${error.message}`);
+        logger.error(`[FileManager] Error: ${error.message}`);
       }
     }
   }
@@ -309,7 +311,7 @@ class TempFileManager {
    */
   logCleanup(stats) {
     if (stats.deleted > 0 || stats.errors > 0) {
-      console.log(`[FileManager] Cleanup: deleted=${stats.deleted}, errors=${stats.errors}, skipped=${stats.skipped}, total=${stats.total}`);
+      logger.info(`[FileManager] Cleanup: deleted=${stats.deleted}, errors=${stats.errors}, skipped=${stats.skipped}, total=${stats.total}`);
     }
   }
 
@@ -348,7 +350,7 @@ class TempFileManager {
 
     await Promise.all(deletionPromises);
     
-    console.log(`[FileManager] Shutdown complete: deleted ${stats.deleted} files`);
+    logger.info(`[FileManager] Shutdown complete: deleted ${stats.deleted} files`);
     return stats;
   }
 }

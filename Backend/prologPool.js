@@ -1,6 +1,8 @@
 const { spawn } = require('child_process');
 const EventEmitter = require('events');
 const path = require('path');
+const logger = require('./src/config/logger');
+const executionConstants = require('./src/constants/execution');
 
 /**
  * SWI-Prolog Process Pool
@@ -11,12 +13,12 @@ class PrologProcessPool extends EventEmitter {
     super();
     
     this.options = {
-      poolSize: 5,
-      maxPoolSize: 20,
-      idleTimeout: 30 * 1000, // 30 seconds
-      processTimeout: 10 * 1000, // 10 seconds
-      healthCheckInterval: 60 * 1000, // 1 minute
-      maxMemoryUsage: 100 * 1024 * 1024, // 100MB
+      poolSize: executionConstants.DEFAULT_POOL_SIZE,
+      maxPoolSize: executionConstants.MAX_POOL_SIZE,
+      idleTimeout: executionConstants.IDLE_TIMEOUT_MS,
+      processTimeout: executionConstants.QUERY_TIMEOUT_MS,
+      healthCheckInterval: executionConstants.HEALTH_CHECK_INTERVAL_MS,
+      maxMemoryUsage: executionConstants.MAX_MEMORY_USAGE,
       ...options
     };
 
@@ -44,7 +46,7 @@ class PrologProcessPool extends EventEmitter {
    * Initialize the process pool
    */
   async initializePool() {
-    console.log(`[ProcessPool] Initializing pool with ${this.options.poolSize} processes`);
+    logger.info(`[ProcessPool] Initializing pool with ${this.options.poolSize} processes`);
     
     const initPromises = [];
     for (let i = 0; i < this.options.poolSize; i++) {
@@ -53,9 +55,9 @@ class PrologProcessPool extends EventEmitter {
 
     try {
       await Promise.all(initPromises);
-      console.log(`[ProcessPool] Pool initialized with ${this.pool.length} processes`);
+      logger.info(`[ProcessPool] Pool initialized with ${this.pool.length} processes`);
     } catch (error) {
-      console.error(`[ProcessPool] Failed to initialize pool: ${error.message}`);
+      logger.error(`[ProcessPool] Failed to initialize pool: ${error.message}`);
       this.emit('error', error);
     }
   }
@@ -114,7 +116,7 @@ class PrologProcessPool extends EventEmitter {
         const readyTimeout = setTimeout(() => {
           processInfo.status = 'timeout';
           reject(new Error(`Process ${processId} initialization timeout`));
-        }, 5000);
+        }, executionConstants.PROCESS_INIT_TIMEOUT_MS);
 
         // SWI-Prolog with -q flag starts ready, no need for handshake
         // Just wait a bit to ensure process is stable
@@ -123,7 +125,7 @@ class PrologProcessPool extends EventEmitter {
           processInfo.status = 'ready';
           this.addToPool(processInfo);
           resolve(processInfo);
-        }, 100);
+        }, executionConstants.PROCESS_READY_DELAY_MS);
 
         this.stats.created++;
         this.emit('processCreated', processInfo);
@@ -141,7 +143,7 @@ class PrologProcessPool extends EventEmitter {
   addToPool(processInfo) {
     this.pool.push(processInfo);
     this.available.push(processInfo);
-    console.log(`[ProcessPool] Process ${processInfo.id} added to pool`);
+    logger.debug(`[ProcessPool] Process ${processInfo.id} added to pool`);
     this.emit('processAdded', processInfo);
     
     // Check if there are waiting requests
@@ -153,7 +155,7 @@ class PrologProcessPool extends EventEmitter {
    * @param {number} timeout - Acquisition timeout in ms
    * @returns {Promise<ProcessInfo>} Acquired process
    */
-  async acquire(timeout = 5000) {
+  async acquire(timeout = executionConstants.PROCESS_ACQUIRE_TIMEOUT_MS) {
     this.stats.acquired++;
 
     // Try to get from available pool first
@@ -170,7 +172,7 @@ class PrologProcessPool extends EventEmitter {
         this.markAsInUse(processInfo);
         return processInfo;
       } catch (error) {
-        console.warn(`[ProcessPool] Failed to create new process: ${error.message}`);
+        logger.warn(`[ProcessPool] Failed to create new process: ${error.message}`);
         // Continue to waiting queue
       }
     }
@@ -244,7 +246,7 @@ class PrologProcessPool extends EventEmitter {
       this.available.push(processInfo);
       
       this.emit('processReleased', processInfo);
-      console.log(`[ProcessPool] Process ${processInfo.id} released back to pool`);
+      logger.debug(`[ProcessPool] Process ${processInfo.id} released back to pool`);
     } else {
       // Destroy process
       this.destroyProcess(processInfo.id);
@@ -269,7 +271,7 @@ class PrologProcessPool extends EventEmitter {
       processInfo.process.stdin.write('retractall(_).\n');
       
     } catch (error) {
-      console.warn(`[ProcessPool] Failed to reset process ${processInfo.id}: ${error.message}`);
+      logger.warn(`[ProcessPool] Failed to reset process ${processInfo.id}: ${error.message}`);
     }
   }
 
@@ -304,13 +306,13 @@ class PrologProcessPool extends EventEmitter {
        processInfo.process.stdout.on('data', (data) => {
          const text = data.toString();
          stdoutData += text;
-         console.log(`[ProcessPool] Process ${processInfo.id} stdout: ${text.trim()}`);
+         logger.debug(`[ProcessPool] Process ${processInfo.id} stdout: ${text.trim()}`);
        });
 
        processInfo.process.stderr.on('data', (data) => {
          const text = data.toString();
          stderrData += text;
-         console.log(`[ProcessPool] Process ${processInfo.id} stderr: ${text.trim()}`);
+         logger.debug(`[ProcessPool] Process ${processInfo.id} stderr: ${text.trim()}`);
        });
 
       // Handle process completion
@@ -378,9 +380,9 @@ class PrologProcessPool extends EventEmitter {
 
          commands.push('halt.');
 
-         const commandString = commands.join('\n');
-         console.log(`[ProcessPool] Sending commands to process ${processInfo.id}:`);
-         console.log(commandString);
+          const commandString = commands.join('\n');
+          logger.debug(`[ProcessPool] Sending commands to process ${processInfo.id}:`);
+          logger.debug(commandString);
          
          processInfo.process.stdin.write(commandString);
          processInfo.process.stdin.end();
@@ -399,14 +401,14 @@ class PrologProcessPool extends EventEmitter {
   handleExecutionTimeout(processId, timeout) {
     const processInfo = this.inUse.get(processId) || this.pool.find(p => p.id === processId);
     if (processInfo) {
-      console.warn(`[ProcessPool] Process ${processId} execution timeout after ${timeout}ms`);
+      logger.warn(`[ProcessPool] Process ${processId} execution timeout after ${timeout}ms`);
       
       try {
         // Kill the process
         processInfo.process.kill('SIGKILL');
         this.destroyProcess(processId);
       } catch (error) {
-        console.error(`[ProcessPool] Failed to kill timed out process ${processId}: ${error.message}`);
+        logger.error(`[ProcessPool] Failed to kill timed out process ${processId}: ${error.message}`);
       }
     }
   }
@@ -417,7 +419,7 @@ class PrologProcessPool extends EventEmitter {
    * @param {Error} error - Error object
    */
   handleProcessError(processId, error) {
-    console.error(`[ProcessPool] Process ${processId} error: ${error.message}`);
+    logger.error(`[ProcessPool] Process ${processId} error: ${error.message}`);
     this.stats.errors++;
     this.destroyProcess(processId);
     this.emit('processError', { processId, error });
@@ -430,7 +432,7 @@ class PrologProcessPool extends EventEmitter {
    * @param {string} signal - Exit signal
    */
   handleProcessExit(processId, code, signal) {
-    console.log(`[ProcessPool] Process ${processId} exited with code ${code} signal ${signal}`);
+    logger.info(`[ProcessPool] Process ${processId} exited with code ${code} signal ${signal}`);
     this.destroyProcess(processId);
   }
 
@@ -499,13 +501,13 @@ class PrologProcessPool extends EventEmitter {
     for (const processInfo of this.available) {
       const idleTime = now - processInfo.lastUsed;
       if (idleTime > this.options.idleTimeout) {
-        console.log(`[ProcessPool] Process ${processInfo.id} idle for ${idleTime}ms, destroying`);
+        logger.debug(`[ProcessPool] Process ${processInfo.id} idle for ${idleTime}ms, destroying`);
         checks.push(this.destroyProcess(processInfo.id));
       }
     }
 
     // Perform active health check on a sample of processes
-    const sampleSize = Math.min(3, this.available.length);
+    const sampleSize = Math.min(executionConstants.HEALTH_CHECK_SAMPLE_SIZE, this.available.length);
     const sample = this.available.slice(0, sampleSize);
     
     for (const processInfo of sample) {
@@ -524,10 +526,10 @@ class PrologProcessPool extends EventEmitter {
   async healthCheckProcess(processInfo) {
     return new Promise((resolve) => {
       const timeout = setTimeout(() => {
-        console.warn(`[ProcessPool] Health check timeout for process ${processInfo.id}`);
+        logger.warn(`[ProcessPool] Health check timeout for process ${processInfo.id}`);
         this.destroyProcess(processInfo.id);
         resolve(false);
-      }, 3000);
+      }, executionConstants.HEALTH_CHECK_TIMEOUT_MS);
 
       try {
         processInfo.process.stdin.write('true.\n');
@@ -540,14 +542,14 @@ class PrologProcessPool extends EventEmitter {
 
         processInfo.process.stderr.once('data', (data) => {
           clearTimeout(timeout);
-          console.warn(`[ProcessPool] Health check error for process ${processInfo.id}: ${data.toString()}`);
+          logger.warn(`[ProcessPool] Health check error for process ${processInfo.id}: ${data.toString()}`);
           this.destroyProcess(processInfo.id);
           resolve(false);
         });
 
       } catch (error) {
         clearTimeout(timeout);
-        console.warn(`[ProcessPool] Health check failed for process ${processInfo.id}: ${error.message}`);
+        logger.warn(`[ProcessPool] Health check failed for process ${processInfo.id}: ${error.message}`);
         this.destroyProcess(processInfo.id);
         resolve(false);
       }
@@ -583,7 +585,7 @@ class PrologProcessPool extends EventEmitter {
    * @returns {Promise<void>}
    */
   async drain() {
-    console.log('[ProcessPool] Draining pool...');
+    logger.info('[ProcessPool] Draining pool...');
     
     // Clear health checks
     if (this.healthCheckInterval) {
@@ -604,7 +606,7 @@ class PrologProcessPool extends EventEmitter {
     );
 
     await Promise.allSettled(destroyPromises);
-    console.log('[ProcessPool] Pool drained');
+    logger.info('[ProcessPool] Pool drained');
     this.emit('poolDrained');
   }
 }
