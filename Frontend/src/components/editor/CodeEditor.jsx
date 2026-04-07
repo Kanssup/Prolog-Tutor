@@ -2,6 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { FaCopy, FaSave, FaFolderOpen, FaExpand, FaCompress, FaTrash } from 'react-icons/fa';
 import Editor from '@monaco-editor/react';
 import useAppStore from '../../store/appStore';
+import { getPrologLanguageConfig, getPrologTokenizer, getPrologLanguageDefinition } from '../../config/monaco/prologLanguage';
+import { getPrologTheme } from '../../config/monaco/prologTheme';
+import { useFeedbackTimeout } from '../../hooks/useFeedbackTimeout';
 
 const CodeEditor = () => {
   const { code, setCode, theme, files, currentFile, saveFile, createFile, loadFile, deleteFile } = useAppStore();
@@ -9,75 +12,16 @@ const CodeEditor = () => {
   const [showFiles, setShowFiles] = useState(false);
   const [saveFeedback, setSaveFeedback] = useState('');
   const editorRef = useRef(null);
-  const saveFeedbackTimeoutRef = useRef(null);
-
-  useEffect(() => {
-    return () => {
-      if (saveFeedbackTimeoutRef.current) {
-        clearTimeout(saveFeedbackTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  const showSaveFeedback = (message) => {
-    setSaveFeedback(message);
-    if (saveFeedbackTimeoutRef.current) {
-      clearTimeout(saveFeedbackTimeoutRef.current);
-    }
-    saveFeedbackTimeoutRef.current = setTimeout(() => {
-      setSaveFeedback('');
-    }, 1800);
-  };
-
-  // Prolog language configuration
-  const prologLanguageConfig = {
-    comments: {
-      lineComment: '%',
-      blockComment: ['/*', '*/'],
-    },
-    brackets: [
-      ['(', ')'],
-      ['[', ']'],
-      ['{', '}'],
-    ],
-    autoClosingPairs: [
-      { open: '(', close: ')' },
-      { open: '[', close: ']' },
-      { open: '{', close: '}' },
-      { open: "'", close: "'", notIn: ['string', 'comment'] },
-      { open: '"', close: '"', notIn: ['string', 'comment'] },
-    ],
-    surroundingPairs: [
-      { open: '(', close: ')' },
-      { open: '[', close: ']' },
-      { open: '{', close: '}' },
-      { open: "'", close: "'" },
-      { open: '"', close: '"' },
-    ],
-  };
-
-  // Prolog theme configuration
-  const prologTheme = {
-    base: theme === 'dark' ? 'vs-dark' : 'vs',
-    inherit: true,
-    rules: [
-      { token: 'comment', foreground: '6A9955' },
-      { token: 'keyword', foreground: '569CD6' },
-      { token: 'variable', foreground: '9CDCFE' },
-      { token: 'predicate', foreground: 'DCDCAA' },
-      { token: 'atom', foreground: '4EC9B0' },
-      { token: 'string', foreground: 'CE9178' },
-      { token: 'number', foreground: 'B5CEA8' },
-      { token: 'operator', foreground: 'D4D4D4' },
-    ],
-    colors: {
-      'editor.background': theme === 'dark' ? '#1f2937' : '#ffffff',
-      'editor.foreground': theme === 'dark' ? '#d1d5db' : '#374151',
-      'editor.lineHighlightBackground': theme === 'dark' ? '#2d374850' : '#f3f4f650',
-      'editorCursor.foreground': '#0ea5e9',
-      'editor.selectionBackground': theme === 'dark' ? '#3b82f650' : '#0ea5e950',
-    },
-  };
+  
+  // Use extracted hook for feedback timeout
+  const { showFeedback } = useFeedbackTimeout(setSaveFeedback);
+  
+  // Use extracted config for Prolog language
+  const prologLanguageConfig = getPrologLanguageConfig(theme);
+  const prologTheme = getPrologTheme(theme);
+  
+  // Get tokenizer for Monaco
+  const prologTokenizer = getPrologTokenizer();
 
   // Initialize Monaco editor
   const handleEditorDidMount = (editor, monaco) => {
@@ -85,65 +29,7 @@ const CodeEditor = () => {
 
     // Register Prolog language
     monaco.languages.register({ id: 'prolog' });
-    monaco.languages.setMonarchTokensProvider('prolog', {
-      defaultToken: '',
-      tokenPostfix: '.pl',
-      
-      keywords: [
-        'true', 'false', 'fail', 'repeat', 'call', 'catch', 'throw',
-        'not', 'once', 'ignore', 'assert', 'asserta', 'assertz',
-        'retract', 'retractall', 'abolish', 'clause', 'current_predicate',
-        'dynamic', 'multifile', 'discontiguous', 'public', 'volatile',
-        'initialization', 'include', 'ensure_loaded', 'use_module',
-        'module', 'export', 'import', 'reexport', 'meta_predicate',
-        'mode', 'op', 'char_conversion', 'current_op', 'set_prolog_flag',
-        'current_prolog_flag', 'set_stream', 'current_stream', 'stream_property',
-        'open', 'close', 'flush_output', 'current_input', 'current_output',
-        'set_input', 'set_output', 'nl', 'put', 'put_byte', 'put_char',
-        'put_code', 'tab', 'get', 'get_byte', 'get_char', 'get_code',
-        'peek', 'peek_byte', 'peek_char', 'peek_code', 'skip', 'read',
-        'read_term', 'write', 'writeq', 'write_canonical', 'write_term',
-        'format', 'atom_length', 'atom_concat', 'sub_atom', 'char_code',
-        'number_chars', 'number_codes', 'atom_chars', 'atom_codes',
-        'name', 'functor', 'arg', '=..', 'copy_term', 'term_variables',
-        'var', 'nonvar', 'atom', 'integer', 'float', 'number', 'atomic',
-        'compound', 'callable', 'ground', '==', '\==', '@<', '@=<', '@>', '@>=',
-        '=:=', '=\=', '<', '=<', '>', '>=', 'is', '=',
-        'between', 'succ', 'plus', 'minus', 'mult', 'div', 'mod', 'rem',
-        'abs', 'sign', 'max', 'min', 'random', 'round', 'truncate', 'floor',
-        'ceiling', 'sqrt', 'sin', 'cos', 'tan', 'asin', 'acos', 'atan',
-        'log', 'exp', '**', '^', 'pi', 'e', 'cputime', 'statistics',
-        'halt', 'abort', 'break', 'trace', 'debug', 'nodebug', 'spy',
-        'nospy', 'leash', 'visible', 'unknown', 'style_check',
-        'consult', 'reconsult', 'compile', 'ensure_loaded', 'use_module',
-      ],
-      
-      operators: [
-        ':-', '-->', '->', ';', ',', '\\+', '=', '\\=', '==', '\\==',
-        '@<', '@=<', '@>', '@>=', '=:=', '=\\=', '<', '=<', '>', '>=',
-        'is', '=..', '?=', '?\\=', '?@<', '?@=<', '?@>', '?@>=',
-      ],
-      
-      tokenizer: {
-        root: [
-          [/%.*/, 'comment'],
-          [/\/\*/, 'comment', '@comment'],
-          [/\d+\.\d+/, 'number'],
-          [/\d+/, 'number'],
-          [/[A-Z_][A-Za-z0-9_]*/, 'variable'],
-          [/[a-z][A-Za-z0-9_]*/, { cases: { '@keywords': 'keyword', '@default': 'predicate' } }],
-          [/[\[\](){}]/, '@brackets'],
-          [/["](?:(?:\\.)|(?:[^"\\]))*["]/, 'string'],
-          [/['](?:(?:\\.)|(?:[^'\\]))*[']/, 'string'],
-          [/[@?\\=<>:;,+*\/-]+/, { cases: { '@operators': 'operator', '@default': '' } }],
-        ],
-        comment: [
-          [/[^\/*]+/, 'comment'],
-          [/\*\//, 'comment', '@pop'],
-          [/[\/*]/, 'comment'],
-        ],
-      },
-    });
+    monaco.languages.setMonarchTokensProvider('prolog', prologTokenizer);
 
     // Set editor configuration
     editor.updateOptions({
@@ -205,11 +91,11 @@ const CodeEditor = () => {
       const newFilename = prompt('Nombre del archivo:', filename);
       if (newFilename) {
         saveFile(newFilename);
-        showSaveFeedback('Archivo guardado');
+        showFeedback('Archivo guardado');
       }
     } else {
       saveFile(filename);
-      showSaveFeedback('Cambios guardados');
+      showFeedback('Cambios guardados');
     }
   };
 

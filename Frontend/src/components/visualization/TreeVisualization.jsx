@@ -10,6 +10,8 @@ import {
 } from 'react-icons/fa';
 import Tree from 'react-d3-tree';
 import useAppStore from '../../store/appStore';
+import { countNodes, getMaxDepth, countNodesByStatus } from '../../utils/tree/treeTraversal';
+import { extractFunctor, detectRecursionFunctor, isRecursionBaseCase } from '../../utils/tree/recursionDetection';
 
 const TreeVisualization = () => {
   const {
@@ -696,139 +698,6 @@ const TreeVisualization = () => {
       </div>
     </div>
   );
-};
-
-// Helper functions
-const extractFunctor = (goal = '') => {
-  const trimmed = String(goal).trim();
-  const match = trimmed.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/);
-  return match ? match[1] : null;
-};
-
-const countFunctorOccurrences = (node, functor) => {
-  if (!node || !functor) return 0;
-
-  let total = extractFunctor(node.goal) === functor ? 1 : 0;
-  if (node.children) {
-    node.children.forEach((child) => {
-      total += countFunctorOccurrences(child, functor);
-    });
-  }
-  return total;
-};
-
-const detectRecursionFunctor = (node) => {
-  if (!node) return null;
-
-  const root = node.goal === 'query' && node.children?.length ? node.children[0] : node;
-  const candidate = extractFunctor(root.goal);
-  if (!candidate) return null;
-
-  return countFunctorOccurrences(root, candidate) > 1 ? candidate : null;
-};
-
-const pickMainRootChild = (root) => {
-  if (!root?.children?.length) return null;
-
-  const ranked = root.children
-    .filter((child) => child.status !== 'fail')
-    .map((child) => {
-      const functor = extractFunctor(child.goal);
-      const recursiveScore = functor ? countFunctorOccurrences(child, functor) * 5 : 0;
-      return {
-        child,
-        score: countNodes(child) + recursiveScore,
-      };
-    })
-    .sort((a, b) => b.score - a.score);
-
-  return ranked[0]?.child || root.children[0];
-};
-
-const buildRecursiveFocusedTree = (tree) => {
-  if (!tree) return null;
-
-  const sourceRoot = tree.goal === 'query' ? pickMainRootChild(tree) : tree;
-  if (!sourceRoot) return tree;
-
-  const functor = detectRecursionFunctor(sourceRoot);
-  if (!functor) return tree;
-
-  const transform = (node) => {
-    const children = node.children || [];
-    const recursiveChildren = children.filter((child) => extractFunctor(child.goal) === functor);
-    const mainRecursiveChild = recursiveChildren[0] || null;
-
-    // Keep successful/meaningful side steps and the main recursive descent.
-    const sideSteps = children.filter(
-      (child) => child !== mainRecursiveChild && child.status !== 'fail'
-    );
-
-    const newChildren = [...sideSteps];
-    if (mainRecursiveChild) {
-      newChildren.push(transform(mainRecursiveChild));
-    }
-
-    return {
-      ...node,
-      children: newChildren,
-    };
-  };
-
-  const focusedRoot = transform(sourceRoot);
-
-  if (tree.goal === 'query') {
-    return {
-      ...tree,
-      children: [focusedRoot],
-      status: focusedRoot.status,
-    };
-  }
-
-  return focusedRoot;
-};
-
-const isRecursionBaseCase = (node, recursionFunctor) => {
-  if (!recursionFunctor || extractFunctor(node.goal) !== recursionFunctor) return false;
-
-  const hasRecursiveChild = (node.children || []).some(
-    (child) => extractFunctor(child.goal) === recursionFunctor
-  );
-
-  return !hasRecursiveChild && node.status === 'success';
-};
-
-const countNodes = (node) => {
-  let count = 1;
-  if (node.children) {
-    node.children.forEach(child => {
-      count += countNodes(child);
-    });
-  }
-  return count;
-};
-
-const getMaxDepth = (node, currentDepth = 0) => {
-  let maxDepth = currentDepth;
-  if (node.children) {
-    node.children.forEach(child => {
-      const childDepth = getMaxDepth(child, currentDepth + 1);
-      maxDepth = Math.max(maxDepth, childDepth);
-    });
-  }
-  return maxDepth;
-};
-
-const countNodesByStatus = (node, status, count = 0) => {
-  if (node.status === status) {
-    count++;
-  }
-  if (node.children) {
-    node.children.forEach(child => {
-      count = countNodesByStatus(child, status, count);
-    });
-  }
-  return count;
 };
 
 export default TreeVisualization;
